@@ -1,12 +1,15 @@
 {
   "name": "@digifi/mondex",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "CLI to index MongoDB collections",
   "type": "module",
   "author": {
     "name": "Kamran Ahmed",
     "email": "kamranahmed.se@gmail.com",
     "url": "https://github.com/kamranahmedse"
+  },
+  "publishConfig": {
+    "@digifi:registry": "https://registry.npmjs.org"
   },
   "main": "index.js",
   "bin": {

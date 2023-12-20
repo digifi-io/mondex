@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { Db, MongoClient } from "mongodb";
+import { CollationOptions, Db, Document, MongoClient } from "mongodb";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -31,6 +31,8 @@ export type GivenConfig = {
   indexes: (Record<string, -1 | 1> & {
     "@isUnique"?: boolean;
     "@expireAfterSeconds"?: number;
+    "@collation"?: CollationOptions;
+    "@partialFilterExpression"?: Document;
   })[];
 };
 
@@ -38,6 +40,8 @@ export type PreparedIndex = {
   name: string;
   isUnique?: boolean;
   expireAfterSeconds?: number;
+  collation?: CollationOptions;
+  partialFilterExpression?: Document;
   keys: Record<string, number>;
 };
 
@@ -72,12 +76,16 @@ export function prepareGivenIndexes(
 
         delete updatedColumns["@isUnique"];
         delete updatedColumns["@expireAfterSeconds"];
+        delete updatedColumns["@collation"];
+        delete updatedColumns["@partialFilterExpression"];
 
         return {
           name: generateNameForIndex(index),
           keys: updatedColumns,
           isUnique: index["@isUnique"],
           expireAfterSeconds: index["@expireAfterSeconds"],
+          collation: index["@collation"],
+          partialFilterExpression: index["@partialFilterExpression"],
         };
       });
 
@@ -115,6 +123,8 @@ async function applyDiff(diff: IndexDiff) {
         await collectionObject.createIndex(index.keys, {
           name: index.name,
           ...(index.isUnique && { unique: true }),
+          ...(index.partialFilterExpression && { partialFilterExpression: index.partialFilterExpression }),
+          ...(index.collation && { collation: index.collation }),
           ...(index.expireAfterSeconds && {
             expireAfterSeconds: index.expireAfterSeconds,
           }),
