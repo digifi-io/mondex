@@ -1,12 +1,15 @@
 {
-  "name": "mondex",
-  "version": "1.0.1",
+  "name": "@digifi/mondex",
+  "version": "1.0.3",
   "description": "CLI to index MongoDB collections",
   "type": "module",
   "author": {
     "name": "Kamran Ahmed",
     "email": "kamranahmed.se@gmail.com",
     "url": "https://github.com/kamranahmedse"
+  },
+  "publishConfig": {
+    "@digifi:registry": "https://registry.npmjs.org"
   },
   "main": "index.js",
   "bin": {
@@ -51,16 +54,8 @@
     "mondex",
     "mongo"
   ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/kamranahmedse/mondex.git"
-  },
   "engines": {
     "node": ">=12.0"
   },
-  "bugs": {
-    "url": "https://github.com/kamranahmedse/mondex/issues"
-  },
-  "homepage": "https://github.com/kamranahmedse/mondex#readme",
   "license": "MIT"
 }

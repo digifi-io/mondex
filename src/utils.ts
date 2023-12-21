@@ -3,7 +3,8 @@ import kleur from "kleur";
 
 export function generateNameForIndex(index: GivenConfig["indexes"][0]) {
   return Object.keys(index)
-    .filter((key) => ["@expireAfterSeconds", "@isUnique"].indexOf(key) === -1)
+    .filter((key) =>
+      ["@expireAfterSeconds", "@isUnique", "@collation", "@partialFilterExpression"].indexOf(key) === -1)
     .map((key) => `${key}_${index[key]}`)
     .join("_");
 }
