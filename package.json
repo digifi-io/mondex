@@ -1,6 +1,6 @@
 {
   "name": "@digifi/mondex",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "CLI to index MongoDB collections",
   "type": "module",
   "author": {
