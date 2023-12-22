@@ -24,6 +24,10 @@ let db: Db;
 export type MongoIndex = {
   name: string;
   keys: Record<string, -1 | 1>;
+  unique?: boolean;
+  expireAfterSeconds?: number;
+  partialFilterExpression?: Document;
+  collation?: CollationOptions;
 };
 
 export type GivenConfig = {
@@ -56,6 +60,10 @@ async function getAllIndexes(): Promise<Record<string, MongoIndex[]>> {
     indexes[collectionName] = collectionIndexes.map((collectionIndex) => ({
       name: collectionIndex.name,
       keys: collectionIndex.key,
+      unique: collectionIndex.unique,
+      partialFilterExpression: collectionIndex.partialFilterExpression,
+      collation: collectionIndex.collation,
+      expireAfterSeconds: collectionIndex.expireAfterSeconds,
     }));
   }
 
