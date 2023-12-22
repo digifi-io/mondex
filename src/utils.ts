@@ -56,7 +56,13 @@ export function getIndexDiff(
       }
 
       const indexChanged =
-        JSON.stringify(existingIndex.keys) !== JSON.stringify(givenIndex.keys);
+        JSON.stringify(existingIndex.keys) !== JSON.stringify(givenIndex.keys)
+        || !!existingIndex.unique !== !!givenIndex.isUnique
+        || existingIndex.expireAfterSeconds !== givenIndex.expireAfterSeconds
+        || JSON.stringify(existingIndex.partialFilterExpression) !== JSON.stringify(givenIndex.partialFilterExpression)
+        || existingIndex.collation?.locale !== givenIndex.collation?.locale
+        || existingIndex.collation?.strength !== givenIndex.collation?.strength;
+
       if (existingIndex.name !== "_id_" && indexChanged) {
         toDrop.push(existingIndex);
         toCreate.push(givenIndex);
