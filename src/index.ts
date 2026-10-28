@@ -59,7 +59,7 @@ async function getAllIndexes(): Promise<Record<string, MongoIndex[]>> {
 
     indexes[collectionName] = collectionIndexes.map((collectionIndex) => ({
       name: collectionIndex.name,
-      keys: collectionIndex.key,
+      keys: collectionIndex.key as MongoIndex['keys'],
       unique: collectionIndex.unique,
       partialFilterExpression: collectionIndex.partialFilterExpression,
       collation: collectionIndex.collation,
