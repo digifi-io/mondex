@@ -1,4 +1,4 @@
-import { generateNameForIndex, prepareIndex } from "../src/utils";
+import { findConfigConflicts, generateNameForIndex, prepareIndex } from "../src/utils";
 
 describe("Tests index creation", function () {
   // Disable console and MongoDB
@@ -34,5 +34,36 @@ describe("prepareIndex", () => {
       partialFilterExpression: { updatedAt: { $exists: true } },
       isManual: true,
     });
+  });
+});
+
+describe("findConfigConflicts", () => {
+  it("returns no conflicts for a valid configuration", () => {
+    const configs: any = [
+      { collection: "a", indexes: [{ x: 1 }, { x: 1, y: 1 }] },
+      { collection: "b", indexes: [{ x: 1 }] },
+    ];
+
+    expect(findConfigConflicts(configs)).toEqual([]);
+  });
+
+  it("reports indexes that differ only in options", () => {
+    const configs: any = [
+      {
+        collection: "a",
+        indexes: [{ x: 1 }, { x: 1, "@partialFilterExpression": { y: { $exists: true } } }],
+      },
+    ];
+
+    expect(findConfigConflicts(configs)).toEqual(["a: more than one index is named x_1"]);
+  });
+
+  it("reports a collection listed twice", () => {
+    const configs: any = [
+      { collection: "a", indexes: [{ x: 1 }] },
+      { collection: "a", indexes: [{ y: 1 }] },
+    ];
+
+    expect(findConfigConflicts(configs)).toEqual(["a: the collection is listed more than once"]);
   });
 });

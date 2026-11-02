@@ -33,9 +33,11 @@ Options:
   -h, --help                 display help for command
 
   -f, --file <file>          path to indexes file (defaults to indexes.json in current directory)
-  -i --uri <uri>             connection string for MongoDB
+  -i, --uri <uri>            connection string for MongoDB (env: MONDEX_URI)
   -d, --db <database>        database name
 ```
+
+Pass a connection string with credentials through `MONDEX_URI`: command-line arguments are visible in the process list and in the error messages of tools that run mondex.
 
 ### Configuration
 
@@ -117,6 +119,8 @@ db.applications.createIndex({ updatedAt: 1 })
 If its options in the database differ from the configuration, `apply` recreates it like any other index.
 
 ### Errors
+
+`plan` and `apply` refuse a configuration that lists a collection twice or gives two indexes of one collection the same name. The name is built from the keys only, so indexes that differ only in their options collide.
 
 `apply` doesn't stop on a failed change: it applies the remaining ones, lists the failures at the end and exits with code 1.
 

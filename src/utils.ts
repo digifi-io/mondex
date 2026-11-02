@@ -28,6 +28,33 @@ export function prepareIndex(index: GivenConfig["indexes"][0]): PreparedIndex {
   };
 }
 
+// Indexes are matched by name, and the name doesn't include the options: two entries
+// with the same keys would replace each other on every apply
+export function findConfigConflicts(configs: GivenConfig[]): string[] {
+  const conflicts: string[] = [];
+  const collections = new Set<string>();
+
+  for (const config of configs) {
+    if (collections.has(config.collection)) {
+      conflicts.push(`${config.collection}: the collection is listed more than once`);
+    }
+
+    collections.add(config.collection);
+
+    const names = new Set<string>();
+    for (const index of config.indexes) {
+      const name = generateNameForIndex(index);
+      if (names.has(name)) {
+        conflicts.push(`${config.collection}: more than one index is named ${name}`);
+      }
+
+      names.add(name);
+    }
+  }
+
+  return conflicts;
+}
+
 export type IndexDiff = {
   collection: string;
   toCreate: PreparedIndex[];
@@ -189,9 +216,6 @@ export function printDiff(diff: IndexDiff) {
 
   for (const diffItem of diff) {
     const { collection, toCreate, toDrop, toSkip } = diffItem;
-    if (!toCreate.length && !toDrop.length && !toSkip.length) {
-      continue;
-    }
 
     printHeader(`Collection: ${collection}`);
     if (toCreate.length) {

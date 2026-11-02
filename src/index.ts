@@ -1,9 +1,10 @@
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { CollationOptions, Db, Document, MongoClient } from "mongodb";
 import fs from "node:fs";
 import path from "node:path";
 import {
   fatal,
+  findConfigConflicts,
   getIndexDiff,
   IndexDiff,
   mongoIndexToUserConfig,
@@ -80,6 +81,11 @@ export function prepareGivenIndexes(
     fs.readFileSync(filePath, "utf-8")
   );
 
+  const conflicts = findConfigConflicts(rawConfigs);
+  if (conflicts.length) {
+    fatal(`Invalid configuration:\n${conflicts.join("\n")}`);
+  }
+
   return rawConfigs.reduce(
     (acc: Record<string, PreparedIndex[]>, index: GivenConfig) => {
       acc[index.collection] = index.indexes.map(prepareIndex);
@@ -103,19 +109,12 @@ async function applyDiff(diff: IndexDiff): Promise<string[]> {
     try {
       await operation();
     } catch (err) {
-      const failure = `${description}: ${(err as Error).message}`;
-
-      console.error(kleur.red(`  Failed to ${failure}`));
-      failures.push(failure);
+      failures.push(`${description}: ${(err as Error).message}`);
     }
   };
 
   for (let diffItem of diff) {
     const { collection, toCreate, toDrop, toSkip } = diffItem;
-    if (!toCreate.length && !toDrop.length && !toSkip.length) {
-      continue;
-    }
-
     const collectionObject = db.collection(collection);
 
     printHeader(`Collection: ${collection}`);
@@ -266,7 +265,11 @@ program.commands.forEach((command) => {
       "path to the file containing the indexes",
       path.join(process.cwd(), "./indexes.json")
     )
-    .requiredOption("-i --uri <uri>", "connection string for MongoDB")
+    .addOption(
+      new Option("-i, --uri <uri>", "connection string for MongoDB")
+        .env("MONDEX_URI")
+        .makeOptionMandatory()
+    )
     .requiredOption("-d, --db <database>", "database name");
 });
 
