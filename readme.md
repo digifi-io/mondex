@@ -95,6 +95,31 @@ For example, `user.email` in the following configuration will be considered as a
 ]
 ```
 
+### Manual Indexes
+
+Every `apply` drops the indexes that are not in the configuration file, but only in the collections listed in it. Mark an index with `@manual` to keep it in the configuration without creating it everywhere: `apply` doesn't create a manual index that is missing, and doesn't drop it where it exists. Create it by hand only in the databases that need it, with the name mondex generates (the default MongoDB name for the same keys, e.g. `updatedAt_1`):
+
+```json
+[
+  {
+    "collection": "applications",
+    "indexes": [
+      { "updatedAt": 1, "@manual": true }
+    ]
+  }
+]
+```
+
+```javascript
+db.applications.createIndex({ updatedAt: 1 })
+```
+
+If its options in the database differ from the configuration, `apply` recreates it like any other index.
+
+### Errors
+
+`apply` doesn't stop on a failed change: it applies the remaining ones, lists the failures at the end and exits with code 1.
+
 ## Examples
 
 > Show the indexes that will be created and dropped
