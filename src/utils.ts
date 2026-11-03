@@ -1,18 +1,65 @@
 import { GivenConfig, MongoIndex, PreparedIndex } from "./index";
 import kleur from "kleur";
 
+const optionKeys = ["@expireAfterSeconds", "@isUnique", "@collation", "@partialFilterExpression", "@manual"];
+
 export function generateNameForIndex(index: GivenConfig["indexes"][0]) {
   return Object.keys(index)
-    .filter((key) =>
-      ["@expireAfterSeconds", "@isUnique", "@collation", "@partialFilterExpression"].indexOf(key) === -1)
+    .filter((key) => optionKeys.indexOf(key) === -1)
     .map((key) => `${key}_${index[key]}`)
     .join("_");
+}
+
+export function prepareIndex(index: GivenConfig["indexes"][0]): PreparedIndex {
+  const keys = { ...index };
+
+  for (const optionKey of optionKeys) {
+    delete keys[optionKey];
+  }
+
+  return {
+    name: generateNameForIndex(index),
+    keys,
+    isUnique: index["@isUnique"],
+    expireAfterSeconds: index["@expireAfterSeconds"],
+    collation: index["@collation"],
+    partialFilterExpression: index["@partialFilterExpression"],
+    isManual: index["@manual"],
+  };
+}
+
+// Indexes are matched by name, and the name doesn't include the options: two entries
+// with the same keys would replace each other on every apply
+export function findConfigConflicts(configs: GivenConfig[]): string[] {
+  const conflicts: string[] = [];
+  const collections = new Set<string>();
+
+  for (const config of configs) {
+    if (collections.has(config.collection)) {
+      conflicts.push(`${config.collection}: the collection is listed more than once`);
+    }
+
+    collections.add(config.collection);
+
+    const names = new Set<string>();
+    for (const index of config.indexes) {
+      const name = generateNameForIndex(index);
+      if (names.has(name)) {
+        conflicts.push(`${config.collection}: more than one index is named ${name}`);
+      }
+
+      names.add(name);
+    }
+  }
+
+  return conflicts;
 }
 
 export type IndexDiff = {
   collection: string;
   toCreate: PreparedIndex[];
   toDrop: MongoIndex[];
+  toSkip: PreparedIndex[];
 }[];
 
 export function mongoIndexToUserConfig(
@@ -43,6 +90,7 @@ export function getIndexDiff(
 
     const toCreate: PreparedIndex[] = [];
     const toDrop: MongoIndex[] = [];
+    const toSkip: PreparedIndex[] = [];
 
     // Prepare the indexes to create and drop
     for (const givenIndex of givenCollectionIndexes) {
@@ -51,7 +99,13 @@ export function getIndexDiff(
       );
 
       if (!existingIndex) {
-        toCreate.push(givenIndex);
+        // Manual indexes are created by hand only where they are needed
+        if (givenIndex.isManual) {
+          toSkip.push(givenIndex);
+        } else {
+          toCreate.push(givenIndex);
+        }
+
         continue;
       }
 
@@ -81,11 +135,12 @@ export function getIndexDiff(
       }
     }
 
-    if (toCreate.length || toDrop.length) {
+    if (toCreate.length || toDrop.length || toSkip.length) {
       indexDiff.push({
         collection: collectionName,
         toCreate,
         toDrop,
+        toSkip,
       });
     }
   }
@@ -144,6 +199,15 @@ export function printDropIndex(index: MongoIndex, prefix = "- Drop") {
   console.log(`${prefix} ${indexDetails}`);
 }
 
+export function printSkipIndex(index: PreparedIndex, prefix = "~ Skip") {
+  const { name, keys } = index;
+  const indexDetails = `${kleur.yellow().bold(name)} ${kleur.yellow(
+    JSON.stringify(keys)
+  )}`;
+
+  console.log(`${prefix} ${indexDetails}${kleur.gray().italic(" (manual, not in database)")}`);
+}
+
 export function printDiff(diff: IndexDiff) {
   if (!diff.length) {
     printInfo("No changes required");
@@ -151,10 +215,7 @@ export function printDiff(diff: IndexDiff) {
   }
 
   for (const diffItem of diff) {
-    const { collection, toCreate, toDrop } = diffItem;
-    if (!toCreate.length && !toDrop.length) {
-      continue;
-    }
+    const { collection, toCreate, toDrop, toSkip } = diffItem;
 
     printHeader(`Collection: ${collection}`);
     if (toCreate.length) {
@@ -167,6 +228,10 @@ export function printDiff(diff: IndexDiff) {
       for (const index of toDrop) {
         printDropIndex(index);
       }
+    }
+
+    for (const index of toSkip) {
+      printSkipIndex(index);
     }
   }
 }
