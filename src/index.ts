@@ -1,19 +1,21 @@
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { CollationOptions, Db, Document, MongoClient } from "mongodb";
 import fs from "node:fs";
 import path from "node:path";
 import {
   fatal,
-  generateNameForIndex,
+  findConfigConflicts,
   getIndexDiff,
   IndexDiff,
   mongoIndexToUserConfig,
+  prepareIndex,
   printCreateIndex,
   printDiff,
   printDropIndex,
   printHeader,
   printInfo,
   printSeparator,
+  printSkipIndex,
   printSuccess,
 } from "./utils";
 import kleur from "kleur";
@@ -37,6 +39,7 @@ export type GivenConfig = {
     "@expireAfterSeconds"?: number;
     "@collation"?: CollationOptions;
     "@partialFilterExpression"?: Document;
+    "@manual"?: boolean;
   })[];
 };
 
@@ -46,6 +49,7 @@ export type PreparedIndex = {
   expireAfterSeconds?: number;
   collation?: CollationOptions;
   partialFilterExpression?: Document;
+  isManual?: boolean;
   keys: Record<string, number>;
 };
 
@@ -77,25 +81,14 @@ export function prepareGivenIndexes(
     fs.readFileSync(filePath, "utf-8")
   );
 
+  const conflicts = findConfigConflicts(rawConfigs);
+  if (conflicts.length) {
+    fatal(`Invalid configuration:\n${conflicts.join("\n")}`);
+  }
+
   return rawConfigs.reduce(
     (acc: Record<string, PreparedIndex[]>, index: GivenConfig) => {
-      acc[index.collection] = index.indexes.map((index) => {
-        const updatedColumns = { ...index };
-
-        delete updatedColumns["@isUnique"];
-        delete updatedColumns["@expireAfterSeconds"];
-        delete updatedColumns["@collation"];
-        delete updatedColumns["@partialFilterExpression"];
-
-        return {
-          name: generateNameForIndex(index),
-          keys: updatedColumns,
-          isUnique: index["@isUnique"],
-          expireAfterSeconds: index["@expireAfterSeconds"],
-          collation: index["@collation"],
-          partialFilterExpression: index["@partialFilterExpression"],
-        };
-      });
+      acc[index.collection] = index.indexes.map(prepareIndex);
 
       return acc;
     },
@@ -103,32 +96,39 @@ export function prepareGivenIndexes(
   );
 }
 
-async function applyDiff(diff: IndexDiff) {
+// Returns the failed changes instead of throwing, so that one failure doesn't skip the remaining collections
+async function applyDiff(diff: IndexDiff): Promise<string[]> {
   if (!diff.length) {
     console.log(kleur.green().gray("No changes required"));
-    return;
+    return [];
   }
 
-  for (let diffItem of diff) {
-    const { collection, toCreate, toDrop } = diffItem;
-    if (!toCreate.length && !toDrop.length) {
-      continue;
-    }
+  const failures: string[] = [];
 
+  const run = async (description: string, operation: () => Promise<unknown>) => {
+    try {
+      await operation();
+    } catch (err) {
+      failures.push(`${description}: ${(err as Error).message}`);
+    }
+  };
+
+  for (let diffItem of diff) {
+    const { collection, toCreate, toDrop, toSkip } = diffItem;
     const collectionObject = db.collection(collection);
 
     printHeader(`Collection: ${collection}`);
     if (toDrop.length) {
       for (let index of toDrop) {
         printDropIndex(index, "- Dropping index");
-        await collectionObject.dropIndex(index.name);
+        await run(`drop ${collection}.${index.name}`, () => collectionObject.dropIndex(index.name));
       }
     }
 
     if (toCreate.length) {
       for (let index of toCreate) {
         printCreateIndex(index, "+ Creating index");
-        await collectionObject.createIndex(index.keys, {
+        await run(`create ${collection}.${index.name}`, () => collectionObject.createIndex(index.keys, {
           name: index.name,
           ...(index.isUnique && { unique: true }),
           ...(index.partialFilterExpression && { partialFilterExpression: index.partialFilterExpression }),
@@ -136,10 +136,16 @@ async function applyDiff(diff: IndexDiff) {
           ...(index.expireAfterSeconds && {
             expireAfterSeconds: index.expireAfterSeconds,
           }),
-        });
+        }));
       }
     }
+
+    for (let index of toSkip) {
+      printSkipIndex(index, "~ Skipping index");
+    }
   }
+
+  return failures;
 }
 
 type RunOptions = {
@@ -207,9 +213,13 @@ async function execute(
   const indexDiff = getIndexDiff(existingIndexes, givenIndexes);
 
   if (command == "apply") {
-    await applyDiff(indexDiff).catch((err) => {
-      console.error(err);
-    });
+    const failures = await applyDiff(indexDiff);
+
+    if (failures.length) {
+      console.error(kleur.red().bold(`Failed to apply ${failures.length} index change(s):`));
+      failures.forEach((failure) => console.error(kleur.red(`  ${failure}`)));
+      process.exitCode = 1;
+    }
   } else if (command == "plan") {
     printDiff(indexDiff);
   } else {
@@ -255,7 +265,11 @@ program.commands.forEach((command) => {
       "path to the file containing the indexes",
       path.join(process.cwd(), "./indexes.json")
     )
-    .requiredOption("-i --uri <uri>", "connection string for MongoDB")
+    .addOption(
+      new Option("-i, --uri <uri>", "connection string for MongoDB")
+        .env("MONDEX_URI")
+        .makeOptionMandatory()
+    )
     .requiredOption("-d, --db <database>", "database name");
 });
 
